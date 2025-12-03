@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+python-multipart
+langchain
+langchain-community
+langchain-qdrant
+langchain-huggingface
+qdrant-client
+groq
+fastembed
+pypdf
+sentence-transformers
+pymupdf
+python-dotenv
