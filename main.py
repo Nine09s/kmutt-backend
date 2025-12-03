@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from qdrant_client import QdrantClient
 from langchain_qdrant import QdrantVectorStore, FastEmbedSparse, RetrievalMode
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
 from groq import Groq
 from dotenv import load_dotenv
 import os
@@ -86,7 +86,7 @@ FORM_DB = {
 print("⏳ กำลังโหลดโมเดล... (รอแป๊บ)")
 
 # 1. Setup Embeddings
-embeddings = HuggingFaceEmbeddings(model_name='BAAI/bge-m3')
+embeddings = FastEmbedEmbeddings(model_name="BAAI/bge-small-en-v1.5")
 sparse_embeddings = FastEmbedSparse(model_name="Qdrant/bm25")
 
 # 2. Connect Qdrant
