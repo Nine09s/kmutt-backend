@@ -5,9 +5,12 @@ from qdrant_client import QdrantClient
 from langchain_qdrant import QdrantVectorStore, FastEmbedSparse, RetrievalMode
 from langchain_huggingface import HuggingFaceEmbeddings
 from groq import Groq
+from dotenv import load_dotenv
 import os
 import re
 import uvicorn
+
+load_dotenv()  # Load environment variables from .env file
 
 # ================= CONFIGURATION =================
 # 💡 แนะนำ: ในระยะยาวควรย้ายไปเก็บใน .env
