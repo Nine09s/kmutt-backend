@@ -10,103 +10,97 @@ import os
 import re
 import uvicorn
 
-load_dotenv()  # Load environment variables from .env file
+load_dotenv()
 
 # ================= CONFIGURATION =================
-# 💡 แนะนำ: ในระยะยาวควรย้ายไปเก็บใน .env
 QDRANT_URL = "https://214fea29-22e9-4e38-902c-8fd9db5abff9.europe-west3-0.gcp.cloud.qdrant.io:6333" 
 QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 COLLECTION_NAME = "demo_collection_HYBRID" 
 
 FORM_DB = {
-    # กลุ่มคำร้องทั่วไป / ทะเบียนประวัติ
-    "RO.01": "https://regis.kmutt.ac.th/service/form/RO-01.pdf", # คำร้องทั่วไป
+    "RO.01": "https://regis.kmutt.ac.th/service/form/RO-01.pdf",
     "สทน. 01": "https://regis.kmutt.ac.th/service/form/RO-01.pdf",
-
-    "RO.03": "https://regis.kmutt.ac.th/service/form/RO-03.pdf", # หนังสือรับรองของผู้ปกครอง
+    "RO.03": "https://regis.kmutt.ac.th/service/form/RO-03.pdf",
     "สทน. 03": "https://regis.kmutt.ac.th/service/form/RO-03.pdf",
-
-    "RO.04": "https://regis.kmutt.ac.th/service/form/RO-04.pdf", # ใบมอบฉันทะ
+    "RO.04": "https://regis.kmutt.ac.th/service/form/RO-04.pdf",
     "สทน. 04": "https://regis.kmutt.ac.th/service/form/RO-04.pdf",
-    
-    "RO.08": "https://regis.kmutt.ac.th/service/form/RO-08.pdf", # ใบแจ้งความจำนงโอนเงินเข้าบัญชีเงินฝาก
+    "RO.08": "https://regis.kmutt.ac.th/service/form/RO-08.pdf",
     "สทน.08": "https://regis.kmutt.ac.th/service/form/RO-08.pdf",
     "สทน. 08": "https://regis.kmutt.ac.th/service/form/RO-08.pdf",
-
-    "กค. 18": "https://regis.kmutt.ac.th/service/form/18.pdf", # ใบแจ้งความจำนงโอนเงินเข้าบัญชีเงินฝาก
+    "กค. 18": "https://regis.kmutt.ac.th/service/form/18.pdf",
     "กค.18": "https://regis.kmutt.ac.th/service/form/18.pdf",
     "แบบ กค.": "https://regis.kmutt.ac.th/service/form/18.pdf",
-
-    "RO.11": "https://regis.kmutt.ac.th/service/form/RO-11.pdf", # คำร้องขอเลื่อนรับพระราชทานปริญญาบัตร
+    "RO.11": "https://regis.kmutt.ac.th/service/form/RO-11.pdf",
     "สทน. 11": "https://regis.kmutt.ac.th/service/form/RO-11.pdf",
-
-    "RO.12": "https://regis.kmutt.ac.th/service/form/RO-12Updated.pdf", # คำร้องขอลาพักการศึกษา
+    "RO.12": "https://regis.kmutt.ac.th/service/form/RO-12Updated.pdf",
     "สทน. 12": "https://regis.kmutt.ac.th/service/form/RO-12Updated.pdf",
-
-    "RO.13": "https://regis.kmutt.ac.th/service/form/RO-13Updated.pdf", # คำร้องขอลาออก
+    "RO.13": "https://regis.kmutt.ac.th/service/form/RO-13Updated.pdf",
     "สทน. 13": "https://regis.kmutt.ac.th/service/form/RO-13Updated.pdf",
-
-    "RO.14": "https://regis.kmutt.ac.th/service/form/RO-14.pdf", # คำร้องขอเปลี่ยนแปลงข้อมูลในทะเบียนประวัติ
+    "RO.14": "https://regis.kmutt.ac.th/service/form/RO-14.pdf",
     "สทน. 14": "https://regis.kmutt.ac.th/service/form/RO-14.pdf",
-
-    "RO.15": "https://regis.kmutt.ac.th/service/form/RO-15_160718.pdf", # คำร้องขอทำบัตรนักศึกษา มจธ.-ธนาคารกรุงเทพ
+    "RO.15": "https://regis.kmutt.ac.th/service/form/RO-15_160718.pdf",
     "สทน. 15": "https://regis.kmutt.ac.th/service/form/RO-15_160718.pdf",
-
-    "RO.16": "https://regis.kmutt.ac.th/service/form/RO-16.pdf", # คำร้องขอลาป่วย/ลากิจ
+    "RO.16": "https://regis.kmutt.ac.th/service/form/RO-16.pdf",
     "สทน. 16": "https://regis.kmutt.ac.th/service/form/RO-16.pdf",
-
-    "RO.18": "https://regis.kmutt.ac.th/service/form/RO-18Updated.pdf", # คำร้องขอลงทะเบียนต่ำกว่า/เกินกว่าหน่วยกิตที่กำหนด
+    "RO.18": "https://regis.kmutt.ac.th/service/form/RO-18Updated.pdf",
     "สทน.18": "https://regis.kmutt.ac.th/service/form/RO-18Updated.pdf",
     "สทน. 18": "https://regis.kmutt.ac.th/service/form/RO-18Updated.pdf",
-
-    "RO.19": "https://regis.kmutt.ac.th/service/form/RO-19.pdf", # คำร้องขอลงทะเบียนต่ำกว่า/เกินกว่าหน่วยกิตที่กำหนด
+    "RO.19": "https://regis.kmutt.ac.th/service/form/RO-19.pdf",
     "สทน. 19": "https://regis.kmutt.ac.th/service/form/RO-19.pdf",
-
-    "RO.20": "https://regis.kmutt.ac.th/service/form/RO-20.pdf", # คำร้องขอลงทะเบียนรายวิชานอกหลักสูตร
+    "RO.20": "https://regis.kmutt.ac.th/service/form/RO-20.pdf",
     "สทน. 20": "https://regis.kmutt.ac.th/service/form/RO-20.pdf",
-
-    "RO.21": "https://regis.kmutt.ac.th/service/form/RO-21.pdf", # คำร้องขอลงทะเบียนเรียนแบบบุคคลภายนอก
+    "RO.21": "https://regis.kmutt.ac.th/service/form/RO-21.pdf",
     "สทน. 21": "https://regis.kmutt.ac.th/service/form/RO-21.pdf",
-
-    "RO.22": "https://regis.kmutt.ac.th/service/form/RO-22.pdf", # คำร้องขอสมัครสอบโดยไม่ต้องเข้าเรียน
+    "RO.22": "https://regis.kmutt.ac.th/service/form/RO-22.pdf",
     "สทน. 22": "https://regis.kmutt.ac.th/service/form/RO-22.pdf",
-
-    "RO.23": "https://regis.kmutt.ac.th/service/form/RO-23.pdf", # คำร้องขอเปลี่ยน/เทียบรายวิชาเรียน
+    "RO.23": "https://regis.kmutt.ac.th/service/form/RO-23.pdf",
     "สทน. 23": "https://regis.kmutt.ac.th/service/form/RO-23.pdf",
-
-    "RO.25": "https://regis.kmutt.ac.th/service/form/RO-25.pdf", # ใบลงทะเบียนเรียน
+    "RO.25": "https://regis.kmutt.ac.th/service/form/RO-25.pdf",
     "สทน. 25": "https://regis.kmutt.ac.th/service/form/RO-25.pdf",
-
-    "RO.26": "https://regis.kmutt.ac.th/service/form/RO-26Updated.pdf", # ใบลงทะเบียนเพิ่ม-ลด-ถอน-เปลี่ยนกลุ่มเรียน
+    "RO.26": "https://regis.kmutt.ac.th/service/form/RO-26Updated.pdf",
     "สทน. 26": "https://regis.kmutt.ac.th/service/form/RO-26Updated.pdf",
 }
 
-# ================= SETUP RAG SYSTEM =================
-print("⏳ กำลังโหลดโมเดล... (รอแป๊บ)")
+# ================= GLOBAL VARIABLES (LAZY LOAD) =================
+# We declare them as None so they don't take up memory at startup
+vector_store_instance = None
+groq_client_instance = None
 
-# 1. Setup Embeddings
-embeddings = FastEmbedEmbeddings(model_name="BAAI/bge-small-en-v1.5")
-sparse_embeddings = FastEmbedSparse(model_name="Qdrant/bm25")
+def get_rag_system():
+    """
+    This function loads the models ONLY when they are needed.
+    It prevents the server from crashing during startup.
+    """
+    global vector_store_instance, groq_client_instance
+    
+    if vector_store_instance is None:
+        print("⏳ Lazy Loading: Initializing AI Models...")
+        
+        # 1. Setup Embeddings
+        embeddings = FastEmbedEmbeddings(model_name="BAAI/bge-small-en-v1.5")
+        sparse_embeddings = FastEmbedSparse(model_name="Qdrant/bm25")
 
-# 2. Connect Qdrant
-client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
+        # 2. Connect Qdrant
+        client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
 
-# 3. Setup Vector Store
-vector_store = QdrantVectorStore(
-    client=client,
-    collection_name=COLLECTION_NAME,
-    embedding=embeddings,
-    sparse_embedding=sparse_embeddings,
-    retrieval_mode=RetrievalMode.HYBRID,
-    vector_name="dense_vector",
-    sparse_vector_name="sparse_vector",
-)
-
-# 4. Setup Groq
-groq_client = Groq(api_key=GROQ_API_KEY)
-
-print("✅ ระบบ RAG พร้อมใช้งานแล้ว!")
+        # 3. Setup Vector Store
+        vector_store_instance = QdrantVectorStore(
+            client=client,
+            collection_name=COLLECTION_NAME,
+            embedding=embeddings,
+            sparse_embedding=sparse_embeddings,
+            retrieval_mode=RetrievalMode.HYBRID,
+            vector_name="dense_vector",
+            sparse_vector_name="sparse_vector",
+        )
+        
+        # 4. Setup Groq
+        groq_client_instance = Groq(api_key=GROQ_API_KEY)
+        
+        print("✅ Lazy Loading: Models are ready!")
+        
+    return vector_store_instance, groq_client_instance
 
 # ================= API SERVER =================
 app = FastAPI()
@@ -122,7 +116,7 @@ app.add_middleware(
 class UserRequest(BaseModel):
     message: str
 
-def get_ai_response(context, question):
+def get_ai_response(context, question, groq_client):
     system_prompt ='''
         คุณคือผู้ช่วยอัจฉริยะด้านคำร้องและเอกสารของ มจธ. (KMUTT)
         ตอบให้กระชับ ชัดเจน เป็นขั้นตอน ใช้ภาษาไทยที่เป็นมิตรกับนักศึกษา
@@ -174,18 +168,22 @@ def read_root():
 @app.post("/chat")
 def chat_endpoint(req: UserRequest):
     print(f"📩 คำถาม: {req.message}")
+    
+    # === CALL LAZY LOADER HERE ===
+    # This ensures models are loaded inside the function, not at startup
+    vector_store, groq_client = get_rag_system()
+    
     user_query = req.message.lower()
     
     try:
         # 1. ค้นหาข้อมูล (Retrieve)
         search_results = vector_store.similarity_search(req.message, k=3)
         
-        # 2. เตรียม Context และดึง Sources (ส่วนที่เพิ่มมาใหม่) ✨
+        # 2. เตรียม Context
         context_text = ""
         sources = []
-        injected_docs = [] # เก็บรายการที่ระบบแอบยัดใส่ให้
+        injected_docs = []
         
-        # กรณี: ถามเรื่องคืนเงิน หรือ สทน.08 หรือ กค.18
         if any(x in user_query for x in ["08", "คืนเงิน", "กค.18", "กค. 18"]):
             injected_docs.append({
                 "name": "แบบฟอร์ม สทน. 08 (ขอคืนเงิน)",
@@ -196,9 +194,7 @@ def chat_endpoint(req: UserRequest):
                 "url": FORM_DB["กค.18"]
             })
             
-        # กรณี: ถามเรื่องหน่วยกิต หรือ สทน.18
         elif any(x in user_query for x in ["18", "หน่วยกิต", "ลงทะเบียนเกิน", "ลงทะเบียนต่ำ"]):
-            # ต้องระวังไม่ให้ชนกับ กค.18
             if "กค" not in user_query:
                 injected_docs.append({
                     "name": "แบบฟอร์ม สทน. 18 (เรื่องหน่วยกิต)",
@@ -206,11 +202,7 @@ def chat_endpoint(req: UserRequest):
                 })
         
         for doc in search_results:
-            # รวมเนื้อหาเพื่อส่งให้ AI
             context_text += f"{doc.page_content}\n\n"
-            
-            # ดึงชื่อไฟล์และเลขหน้าจาก Metadata (เพื่อส่งกลับไปหน้าเว็บ)
-            # .get("key", default_value) ป้องกัน error ถ้าไม่มีข้อมูล
             file_path = doc.metadata.get("file", "เอกสารทั่วไป")
             base_file_name = file_path.split("/")[-1] if "/" in file_path else file_path
             page_num = doc.metadata.get("page", 0) + 1
@@ -228,40 +220,32 @@ def chat_endpoint(req: UserRequest):
             display_name = base_file_name
             doc_url = ""
     
-            # ---------------------------------------------------------
-            # 🚀 ตรวจจับชื่อฟอร์ม (สแกนหาจาก DB ที่เราเตรียมไว้)
-            # ---------------------------------------------------------
             found_form = False
             for keyword, url in FORM_DB.items():
-                # ใช้ .lower() เพื่อให้ RO.16 กับ ro.16 เจอเหมือนกัน
                 if keyword.lower() in doc.page_content.lower() or keyword in base_file_name:
                     doc_url = url
                     display_name = f"ดาวน์โหลดแบบฟอร์ม {keyword}"
                     found_form = True
                     break
     
-            # ถ้าไม่เจอ form ใน DB ให้ลองสกัดลิงก์จากเนื้อหา
             if not found_form:
                 found_urls = re.findall(r'(https?://[^\s\)]+)', doc.page_content)
                 if found_urls:
                     doc_url = found_urls[0]
             
-            # 🔥 ยัดลิงก์ใส่ Context ให้ AI เห็นด้วย (AI จะได้พิมพ์ออกมาได้)
             content_with_link = doc.page_content
             if doc_url:
                 content_with_link += f"\n[ข้อมูลเพิ่มเติม: แบบฟอร์มนี้สามารถดาวน์โหลดได้ที่ลิงก์นี้: {doc_url}]\n"
             
             context_text += f"{content_with_link}\n\n"
     
-            # สร้าง Sources ส่งกลับไปหน้าเว็บ
-            if doc_url: # ส่งเฉพาะอันที่มีประโยชน์
+            if doc_url:
                 sources.append({
                     "doc": display_name,
                     "page": page_num,
                     "url": doc_url
                 })
     
-        # ลบแหล่งที่ซ้ำกัน
         unique_sources = []
         seen_urls = set()
         for s in sources:
@@ -269,13 +253,14 @@ def chat_endpoint(req: UserRequest):
                 unique_sources.append(s)
                 seen_urls.add(s['url'])
     
-        answer = get_ai_response(context_text, req.message)
+        # Pass groq_client to the function
+        answer = get_ai_response(context_text, req.message, groq_client)
         
         return { "reply": answer, "sources": unique_sources }
     
     except Exception as e:
         print(f"Error: {e}")
         return { "reply": "เกิดข้อผิดพลาดในระบบ", "sources": [] }
-    
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
