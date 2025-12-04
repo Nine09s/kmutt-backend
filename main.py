@@ -16,7 +16,7 @@ load_dotenv()
 QDRANT_URL = "https://214fea29-22e9-4e38-902c-8fd9db5abff9.europe-west3-0.gcp.cloud.qdrant.io:6333" 
 QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-COLLECTION_NAME = "demo_collection_lite"
+COLLECTION_NAME = "demo_collection_railway_v2"
 
 FORM_DB = {
     "RO.01": "https://regis.kmutt.ac.th/service/form/RO-01.pdf",
