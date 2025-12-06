@@ -263,4 +263,6 @@ def chat_endpoint(req: UserRequest):
         return { "reply": "เกิดข้อผิดพลาดในระบบ", "sources": [] }
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # อ่าน Port จากระบบ ถ้าไม่มีให้ใช้ 8000
+    port = int(os.environ.get("PORT", 8000)) 
+    uvicorn.run(app, host="0.0.0.0", port=port)
