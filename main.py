@@ -25,11 +25,11 @@ COLLECTION_NAME = "demo_collection_railway_v2"
 # 📂 ตั้งค่า Template (ต้องสร้างโฟลเดอร์ templates และใส่ไฟล์ .docx ไว้ข้างใน)
 TEMPLATE_DIR = "templates"
 TEMPLATE_MAP = {
-    "RO.01": os.path.join(TEMPLATE_DIR, "RO-01.docx"),
-    "RO.03": os.path.join(TEMPLATE_DIR, "RO-03.docx"),
-    "RO.12": os.path.join(TEMPLATE_DIR, "RO-12.docx"),
-    "RO.16": os.path.join(TEMPLATE_DIR, "RO-16.docx"),
-    # เพิ่มไฟล์อื่นๆ ตามที่มีจริง
+    "RO.01": os.path.join(TEMPLATE_DIR, "RO-01_General_Request.docx"),
+    "RO.03": os.path.join(TEMPLATE_DIR, "RO-03_Guardian.docx"),
+    "RO.12": os.path.join(TEMPLATE_DIR, "RO-12_Withdrawal.docx"), # (เดาชื่อจากรูป ถ้าไม่ใช่ให้แก้ตามจริง)
+    "RO.13": os.path.join(TEMPLATE_DIR, "RO-13_Resignation.docx"),
+    "RO.16": os.path.join(TEMPLATE_DIR, "RO-16_Sick_Leave.docx"),
 }
 
 # ✅ 1. ฐานข้อมูลฟอร์มฉบับสมบูรณ์ (Master Data)
