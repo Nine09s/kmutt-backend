@@ -267,7 +267,7 @@ def get_ai_response(context, question, groq_client):
         - ข้อมูลส่วนตัว (student_id, name) ถ้ามีให้ใส่ ถ้าไม่มีให้เว้นว่าง
 
         รูปแบบ Tag JSON (บรรทัดสุดท้าย):
-        [[FORM_DATA: {
+        [[FORM_DATA: {{
             "student_id": "เลขประจำตัวนักศึกษา... เช่น 68070501044", 
             "name": "ชื่อ-นามสกุล... เช่น นายวชิรวิทย์ ภูผา", 
             "faculty": "คณะ... เช่น วิศวกรรมศาสตร์",
@@ -276,7 +276,7 @@ def get_ai_response(context, question, groq_client):
             "form_id": "ใส่รหัสตรงนี้ (เช่น RO.16)",
             "draft_reason": "ข้อความร่างภาษาทางการ...",
             "draft_subject": "เรื่อง..."
-        }]]
+        }}]]
 
     '''
     
