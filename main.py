@@ -282,7 +282,7 @@ Contact Info: หากเอกสารระบุเบอร์โทรห
    
     try:
         response = groq_client.chat.completions.create(
-            model="llama-3.1-70b-versatile",  # เปลี่ยนเป็น 70b เพื่อแม่นขึ้น
+            model="llama-3.1-8b-instant",
             messages=messages,
             temperature=0.1,
             max_tokens=500  # Limit เพื่อป้องกัน response ยาวซ้ำ
