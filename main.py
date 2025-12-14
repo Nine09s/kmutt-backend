@@ -14,6 +14,7 @@ import os
 import re
 import uvicorn
 import json
+import threading
 
 load_dotenv()
 
@@ -67,14 +68,15 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
-    history: List[ChatMessage] = Field(default_factory=list) # ✅ เพิ่ม History เพื่อจำ Context
+    history: List[ChatMessage] = Field(default_factory=list)
 
-# ================= PROMPT (UPDATED with Workflow & Few-Shot) =================
+# ================= PROMPT (UPDATED to Prevent Repetition) =================
 SYSTEM_PROMPT_TEXT = f'''
 Role: คุณคือ "น้องผู้ช่วย มจธ." (KMUTT Assistant) ผู้เชี่ยวชาญอัจฉริยะด้านงานทะเบียน
 บทบาท: **"ที่ปรึกษาเชิงรุก" (Proactive Consultant)**
 - ไม่ต้องรอคำสั่ง ถ้าเห็นผู้ใช้มีปัญหา (เช่น ป่วย, เกรดตก, มีธุระ) ให้เสนอ **"ร่างคำร้อง"** ทันที
 - ใช้ภาษาไทยที่สุภาพ เป็นทางการ แต่เป็นมิตร (Service Mind)
+- **Conciseness:** ตอบให้กระชับ ตรงประเด็น ห้ามเวิ่นเว้อ ห้ามตอบวนลูป
 - Context: ข้อมูลอ้างอิงของคุณจำกัดอยู่เพียง: {FORM_LIST_TEXT} เท่านั้น
 
 ---
@@ -88,7 +90,10 @@ Role: คุณคือ "น้องผู้ช่วย มจธ." (KMUTT A
    - ส่งเฉพาะ `name`, `faculty`, `department`, `form_id`, `draft_subject`, `draft_reason` เท่านั้น
 4. **Proactive Drafting:**
    - หากเจตนาผู้ใช้ชัดเจน (เช่น "ปวดหัวจัง", "รถล้ม", "จะลาออก") **ให้ทำการร่างคำร้องและส่ง JSON ทันที** ไม่ต้องรอให้ผู้ใช้พิมพ์คำว่า "ช่วยทำฟอร์ม"
-5. **JSON Output Rules:**
+5. **Anti-Repetition & Summarization:** (สำคัญมาก)
+   - ห้ามทำซ้ำประโยคเดิมหรือตอบวนลูป
+   - ให้ **"สรุป"** ใจความสำคัญจากเอกสารอ้างอิง ห้ามคัดลอกข้อความในแบบฟอร์ม (เช่น "ข้อความที่จะลงนาม" หรือ "ข้าพเจ้าขอ...") มาแสดงซ้ำๆ
+6. **JSON Output Rules:**
    - ทุกครั้งที่มีการร่างหรือแก้ไข ต้องส่ง Tag นี้ไว้ท้ายสุดเสมอ:
    [[FORM_DATA: {{
        "form_id": "RO.xx",
@@ -108,7 +113,7 @@ Role: คุณคือ "น้องผู้ช่วย มจธ." (KMUTT A
 **รูปแบบ:**
 - สรุปชื่อกรณีที่เกี่ยวข้อง
 - **แบบฟอร์ม:** ระบุชื่อและรหัส (เช่น สทน. 16 / RO.16)
-- **ขั้นตอน:** สรุปเป็น Bullet points
+- **ขั้นตอน:** สรุปเป็น Bullet points สั้นๆ
 - **การอนุมัติ:** ต้องให้ใครเซ็นบ้าง
 - **Closing:** "ต้องการให้ผมช่วยร่างคำร้องนี้ให้เลยไหมครับ?"
 
@@ -181,6 +186,8 @@ Role: คุณคือ "น้องผู้ช่วย มจธ." (KMUTT A
 vector_store_instance = None
 groq_client_instance = None
 
+lock = threading.Lock()
+
 def get_rag_system():
     global vector_store_instance, groq_client_instance
     if vector_store_instance is None:
@@ -212,17 +219,10 @@ app.add_middleware(
 
 # 🧠 AI Function
 def get_ai_response(rag_context_text: str, current_question: str, history: List[ChatMessage], groq_client: Groq):
-    
-    # 1. สร้างข้อความ System
     messages = [{"role": "system", "content": SYSTEM_PROMPT_TEXT}]
-    
-    # 2. ใส่ History (ประวัติการคุย) เข้าไป
-    # แปลง Pydantic model เป็น dict เพื่อส่งให้ Groq
     for msg in history:
         messages.append({"role": msg.role, "content": msg.content})
 
-    # 3. ใส่ Context + คำถามล่าสุด
-    # รวม Context ไว้ใน User Message ล่าสุดเพื่อให้ AI โฟกัสข้อมูลใหม่
     final_user_content = f"Reference Context (ข้อมูลอ้างอิง):\n{rag_context_text}\n\nUser Question (คำถามปัจจุบัน): {current_question}"
     messages.append({"role": "user", "content": final_user_content})
     
@@ -230,9 +230,15 @@ def get_ai_response(rag_context_text: str, current_question: str, history: List[
         response = groq_client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=messages,
-            temperature=0.3 # Low temp for precision
+            temperature=0.3,
+            max_tokens=1024,
+            top_p=0.9
         )
-        return response.choices[0].message.content
+        ai_response = response.choices[0].message.content
+        # ตรวจสอบว่าคำตอบซ้ำกับข้อความใน history หรือไม่
+        if ai_response.strip() in [msg.content.strip() for msg in history]:
+            raise Exception("AI response detected as duplicate")
+        return ai_response
     except Exception as e:
         print(f"Groq API Error: {e}")
         return f"ขออภัยครับ เกิดข้อผิดพลาดในการเชื่อมต่อกับ AI ({str(e)})"
@@ -252,13 +258,15 @@ def chat_endpoint(req: ChatRequest):
         sources = []
         
         # 1. Keyword Search
+        seen_urls = set()  # Set to track unique URLs
         for item in FORM_MASTER_DATA:
             for kw in item["keywords"]:
                 if kw in user_query: 
-                    context_text += f"\n[ข้อมูลสำคัญ]: ผู้ใช้ถามถึง '{item['name']}' ({item['id']}). ลิงก์: {item['url']}\n"
-                    if not any(s['url'] == item["url"] for s in sources):
+                    if item["url"] not in seen_urls:
+                        context_text += f"\n[ข้อมูลสำคัญ]: ผู้ใช้ถามถึง '{item['name']}' ({item['id']}). ลิงก์: {item['url']}\n"
                         sources.append({"doc": f"{item['id']} {item['name']}", "page": 1, "url": item["url"]})
-                    break 
+                        seen_urls.add(item["url"])
+                    break
 
         # 2. Vector Search
         k_val = 5
