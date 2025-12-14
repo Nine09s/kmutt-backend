@@ -223,38 +223,28 @@ def chat_endpoint(req: ChatRequest):
     print(f"📩 Incoming Message: {req.message}")
     vector_store, groq_client = get_rag_system()
     user_query = req.message.lower()
-    
-    @app.post("/chat")
-def chat_endpoint(req: ChatRequest):
-    print(f"📩 Incoming Message: {req.message}")
-    vector_store, groq_client = get_rag_system()
-    user_query = req.message.lower()
-    
     try:
+        # ส่วน Text & Keyword Matching
         context_text = ""
-        sources = []  # เพื่ออ้างอิงแหล่งที่มาของคำตอบ
-
-        # ✅ พยายามจับ match กับ FORM_DB
-        seen_urls = set()
-        for keyword in FORM_DB:
+        sources = []
+        for keyword, url in FORM_DB.items():
             if keyword in user_query:
-                matched_url = FORM_DB[keyword]
-                if matched_url not in seen_urls:
-                    context_text += f"พบฟอร์ม: {keyword} (URL: {matched_url})\n"
-                    sources.append({"keyword": keyword, "url": matched_url})
-                    seen_urls.add(matched_url)
+                context_text += f"พบฟอร์ม: {keyword} ({url})\n"
+                sources.append({"keyword": keyword, "url": url})
 
-        # 🔄 หากไม่มี match, ใช้ Vector Search เป็น Fallback
-        if not context_text:
+        # หากไม่เจอใน FORM_DB ให้ใช้ Vector Search
+        if not sources:
             search_results = vector_store.similarity_search(user_query, k=3)
             for doc in search_results:
-                context_text += doc.page_content + "\n"
+                context_text += f"{doc.page_content}\n"
+                sources.append({"url": doc.metadata.get("url", "")})
 
-        # สร้าง response ผ่าน model
+        # รับข้อมูลจาก AI
         answer = get_ai_response(context_text, req.message, groq_client)
         return {"reply": answer, "sources": sources}
-    
+
     except Exception as e:
+        print(f"Error: {e}")
         return {"reply": "เกิดข้อผิดพลาดในระบบ", "sources": []}
 
         # 2. Vector Search
