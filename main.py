@@ -57,9 +57,16 @@ FORM_MASTER_DATA = [
     {"id": "RO.26", "name": "ใบเพิ่ม-ลด-ถอน-เปลี่ยนกลุ่ม", "url": "https://regis.kmutt.ac.th/service/form/RO-26Updated.pdf", "keywords": ["เพิ่มวิชา", "ro26", "ro.26", "ถอนวิชา", "เปลี่ยนเซค", "เปลี่ยน sec", "add/drop", "ลดวิชา", "ถอน w", "ติด w", "สทน.26"]},
 ]
 
-FORM_LIST_TEXT = "" 
+# สร้าง FORM_DB สำหรับค้นหา URL ให้รวดเร็วขึ้น
+FORM_DB = {}
 for item in FORM_MASTER_DATA:
-    FORM_LIST_TEXT += f"- {item['name']} ใช้ฟอร์มรหัส: {item['id']}\n"
+    FORM_DB[item["id"]] = item["url"]
+    FORM_DB[item["name"]] = item["url"]
+    FORM_DB[item["id"].replace(".", "")] = item["url"]   # ตัวอย่าง: "RO01"
+    FORM_DB[item["id"].replace(".", ". ")] = item["url"] # ตัวอย่าง: "RO. 01"
+    
+    for kw in item["keywords"]:
+        FORM_DB[kw] = item["url"]
 
 # ================= DATA MODELS =================
 class ChatMessage(BaseModel):
@@ -194,7 +201,7 @@ def get_ai_response(rag_context_text: str, current_question: str, history: List[
         response = groq_client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=messages,
-            temperature=0.3,
+            temperature=0.1,
             max_tokens=1024,
             top_p=0.9
         )
@@ -217,20 +224,38 @@ def chat_endpoint(req: ChatRequest):
     vector_store, groq_client = get_rag_system()
     user_query = req.message.lower()
     
+    @app.post("/chat")
+def chat_endpoint(req: ChatRequest):
+    print(f"📩 Incoming Message: {req.message}")
+    vector_store, groq_client = get_rag_system()
+    user_query = req.message.lower()
+    
     try:
         context_text = ""
-        sources = []
-        
-        # 1. Keyword Search
-        seen_urls = set()  # Set to track unique URLs
-        for item in FORM_MASTER_DATA:
-            for kw in item["keywords"]:
-                if kw in user_query: 
-                    if item["url"] not in seen_urls:
-                        context_text += f"\n[ข้อมูลสำคัญ]: ผู้ใช้ถามถึง '{item['name']}' ({item['id']}). ลิงก์: {item['url']}\n"
-                        sources.append({"doc": f"{item['id']} {item['name']}", "page": 1, "url": item["url"]})
-                        seen_urls.add(item["url"])
-                    break
+        sources = []  # เพื่ออ้างอิงแหล่งที่มาของคำตอบ
+
+        # ✅ พยายามจับ match กับ FORM_DB
+        seen_urls = set()
+        for keyword in FORM_DB:
+            if keyword in user_query:
+                matched_url = FORM_DB[keyword]
+                if matched_url not in seen_urls:
+                    context_text += f"พบฟอร์ม: {keyword} (URL: {matched_url})\n"
+                    sources.append({"keyword": keyword, "url": matched_url})
+                    seen_urls.add(matched_url)
+
+        # 🔄 หากไม่มี match, ใช้ Vector Search เป็น Fallback
+        if not context_text:
+            search_results = vector_store.similarity_search(user_query, k=3)
+            for doc in search_results:
+                context_text += doc.page_content + "\n"
+
+        # สร้าง response ผ่าน model
+        answer = get_ai_response(context_text, req.message, groq_client)
+        return {"reply": answer, "sources": sources}
+    
+    except Exception as e:
+        return {"reply": "เกิดข้อผิดพลาดในระบบ", "sources": []}
 
         # 2. Vector Search
         k_val = 5
