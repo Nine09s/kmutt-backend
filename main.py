@@ -14,7 +14,6 @@ import os
 import re
 import uvicorn
 import json
-import threading
 
 load_dotenv()
 
@@ -34,7 +33,7 @@ TEMPLATE_MAP = {
     "RO.16": os.path.join(TEMPLATE_DIR, "RO-16_Sick_Leave.docx"),
 }
 
-# ✅ 1. ฐานข้อมูลฟอร์ม
+# ✅ 1. ฐานข้อมูลฟอร์ม (Master Data)
 FORM_MASTER_DATA = [
     {"id": "RO.01", "name": "คำร้องทั่วไป (General Request)", "url": "https://regis.kmutt.ac.th/service/form/RO-01.pdf", "keywords": ["คำร้องทั่วไป", "ro01", "ro.01", "general", "อื่นๆ", "เรื่องทั่วไป", "สทน.01"]},
     {"id": "RO.03", "name": "หนังสือรับรองของผู้ปกครอง", "url": "https://regis.kmutt.ac.th/service/form/RO-03.pdf", "keywords": ["ผู้ปกครอง", "ro03", "ro.03", "หนังสือรับรอง", "ยินยอม", "parent", "สทน.03"]},
@@ -57,16 +56,10 @@ FORM_MASTER_DATA = [
     {"id": "RO.26", "name": "ใบเพิ่ม-ลด-ถอน-เปลี่ยนกลุ่ม", "url": "https://regis.kmutt.ac.th/service/form/RO-26Updated.pdf", "keywords": ["เพิ่มวิชา", "ro26", "ro.26", "ถอนวิชา", "เปลี่ยนเซค", "เปลี่ยน sec", "add/drop", "ลดวิชา", "ถอน w", "ติด w", "สทน.26"]},
 ]
 
-# สร้าง FORM_DB สำหรับค้นหา URL ให้รวดเร็วขึ้น
-FORM_DB = {}
+# สร้างตัวแปร FORM_LIST_TEXT ให้ AI อ่าน
+FORM_LIST_TEXT = "" 
 for item in FORM_MASTER_DATA:
-    FORM_DB[item["id"]] = item["url"]
-    FORM_DB[item["name"]] = item["url"]
-    FORM_DB[item["id"].replace(".", "")] = item["url"]   # ตัวอย่าง: "RO01"
-    FORM_DB[item["id"].replace(".", ". ")] = item["url"] # ตัวอย่าง: "RO. 01"
-    
-    for kw in item["keywords"]:
-        FORM_DB[kw] = item["url"]
+    FORM_LIST_TEXT += f"- {item['name']} ใช้ฟอร์มรหัส: {item['id']}\n"
 
 # ================= DATA MODELS =================
 class ChatMessage(BaseModel):
@@ -77,11 +70,15 @@ class ChatRequest(BaseModel):
     message: str
     history: List[ChatMessage] = Field(default_factory=list)
 
-# ================= PROMPT (UPDATED to Prevent Repetition) =================
+# ================= PROMPT =================
 SYSTEM_PROMPT_TEXT = f'''
 คุณคือผู้ช่วยอัจฉริยะด้านคำร้องและเอกสารของ มจธ. (KMUTT)
 ตอบให้กระชับ ชัดเจน เป็นขั้นตอน ใช้ภาษาไทยที่เป็นมิตรกับนักศึกษา ให้คิดวิเคราะห์ก่อนตอบ หากถามกำกวมให้ถามเพื่อขอข้อมูลเพิ่มเติม
 ถ้ามีแบบฟอร์มหรือลิงก์ต้องใส่ให้ครบ โดยต้องมีความถูกต้อง แม่นยำ และอ้างอิงจากเอกสารที่ได้รับมอบหมาย (Source Documents) เท่านั้น
+
+📚 **ข้อมูลอ้างอิง (Source of Truth):**
+        {FORM_LIST_TEXT}
+**ตรวจจากข้อมูลอ้างอิงให้ถี่ถ้วนก่อนนำข้อมูลไปใช้**
 
 Core Directives (กฎเหล็ก):
 1. Zero Hallucination: ห้ามคิดเอง ห้ามเดาขั้นตอน หรือนำความรู้ภายนอกมาตอบ หากข้อมูลไม่มีในเอกสาร ให้ตอบว่า "ไม่มีข้อมูลในเอกสารอ้างอิง" เท่านั้น
@@ -108,7 +105,7 @@ Step 4: Drafting & Action (โครงสร้างคำตอบ - กร�
   *ใช้เมื่อผู้ใช้บอกข้อมูล (ชื่อ/คณะ/เหตุผล) หรือสั่งให้ร่าง*
   1. Action: แปลงเหตุผลภาษาพูดของผู้ใช้ เป็น "ภาษาเขียนทางการ"
   2. Response: แสดงข้อความที่ร่างให้
-  3. JSON Output: แนบ Tag `[[FORM_DATA: {...}]]` ไว้ท้ายคำตอบเสมอ
+  3. JSON Output: แนบ Tag `[[FORM_DATA: {{...}}]]` ไว้ท้ายคำตอบเสมอ
 
 ---
 
@@ -123,37 +120,11 @@ JSON Output Rules (กฎการส่งข้อมูล):
     "draft_reason": "เนื้อหาความจำเป็นที่เรียบเรียงเป็นภาษาทางการ"
 }}]]
 *หมายเหตุ: ห้ามส่ง key student_id (ระบบจะจัดการเอง)*
-
----
-
-ตัวอย่างคำตอบที่ดี (กรณีถามข้อมูล):
-"การลา มี 2 กรณีที่เกี่ยวข้อง
-1. กรณีลาป่วย
- - แบบฟอร์ม: สทน. 16
- - ขั้นตอน: ยื่นต่ออาจารย์ที่ปรึกษา...
-ต้องการให้ผมช่วยร่างคำร้องไหมครับ?"
-
-ตัวอย่างคำตอบที่ดี (กรณีสั่งร่าง/ให้ข้อมูล):
-"รับทราบครับคุณสมชาย หายไวๆ นะครับ ผมได้ร่างคำร้องให้เรียบร้อยแล้ว:
-
-📝 **ข้อความร่าง:**
-'เนื่องจากข้าพเจ้ามีอาการเจ็บป่วยกะทันหัน (อาการปวดศีรษะรุนแรง) จึงไม่สามารถเข้าเรียนได้...'
-
-[[FORM_DATA: {{
-    "form_id": "RO.16",
-    "name": "นายสมชาย ใจดี",
-    "faculty": "วิศวกรรมศาสตร์",
-    "department": "วิศวกรรมคอมพิวเตอร์",
-    "draft_subject": "ขอลาหยุดเรียนเนื่องจากอาการเจ็บป่วย",
-    "draft_reason": "เนื่องจากข้าพเจ้ามีอาการเจ็บป่วยกะทันหัน (อาการปวดศีรษะรุนแรง)..."
-}}]]"
 '''
 
 # ================= GLOBAL VARIABLES =================
 vector_store_instance = None
 groq_client_instance = None
-
-lock = threading.Lock()
 
 def get_rag_system():
     global vector_store_instance, groq_client_instance
@@ -184,12 +155,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 🧠 AI Function
+# 🧠 AI Function (ฟังก์ชันเดียวที่ใช้เรียก Groq)
 def get_ai_response(rag_context_text: str, current_question: str, history: List[ChatMessage], groq_client: Groq):
     messages = [{"role": "system", "content": SYSTEM_PROMPT_TEXT}]
+    
+    # ใส่ประวัติการคุย
     for msg in history:
         messages.append({"role": msg.role, "content": msg.content})
 
+    # ใส่คำถามปัจจุบัน + Context
     final_user_content = f"Reference Context (ข้อมูลอ้างอิง):\n{rag_context_text}\n\nUser Question (คำถามปัจจุบัน): {current_question}"
     messages.append({"role": "user", "content": final_user_content})
     
@@ -201,11 +175,7 @@ def get_ai_response(rag_context_text: str, current_question: str, history: List[
             max_tokens=1024,
             top_p=0.9
         )
-        ai_response = response.choices[0].message.content
-        # ตรวจสอบว่าคำตอบซ้ำกับข้อความใน history หรือไม่
-        if ai_response.strip() in [msg.content.strip() for msg in history]:
-            raise Exception("AI response detected as duplicate")
-        return ai_response
+        return response.choices[0].message.content
     except Exception as e:
         print(f"Groq API Error: {e}")
         return f"ขออภัยครับ เกิดข้อผิดพลาดในการเชื่อมต่อกับ AI ({str(e)})"
@@ -219,53 +189,47 @@ def chat_endpoint(req: ChatRequest):
     print(f"📩 Incoming Message: {req.message}")
     vector_store, groq_client = get_rag_system()
     user_query = req.message.lower()
+    
     try:
-        # ส่วน Text & Keyword Matching
         context_text = ""
         sources = []
-        for keyword, url in FORM_DB.items():
-            if keyword in user_query:
-                context_text += f"พบฟอร์ม: {keyword} ({url})\n"
-                sources.append({"keyword": keyword, "url": url})
+        
+        # 1. Keyword Search (ค้นหาจาก FORM_MASTER_DATA)
+        for item in FORM_MASTER_DATA:
+            for kw in item["keywords"]:
+                if kw in user_query: 
+                    context_text += f"\n[ข้อมูลสำคัญ]: ผู้ใช้ถามถึง '{item['name']}' ({item['id']}). ลิงก์: {item['url']}\n"
+                    if not any(s['url'] == item["url"] for s in sources):
+                        sources.append({"doc": f"{item['id']} {item['name']}", "page": 1, "url": item["url"]})
+                    break 
 
-        # หากไม่เจอใน FORM_DB ให้ใช้ Vector Search
-        if not sources:
-            search_results = vector_store.similarity_search(user_query, k=3)
-            for doc in search_results:
-                context_text += f"{doc.page_content}\n"
-                sources.append({"url": doc.metadata.get("url", "")})
-
-        # รับข้อมูลจาก AI
-        answer = get_ai_response(context_text, req.message, groq_client)
-        return {"reply": answer, "sources": sources}
-
-    except Exception as e:
-        print(f"Error: {e}")
-        return {"reply": "เกิดข้อผิดพลาดในระบบ", "sources": []}
-
-        # 2. Vector Search
+        # 2. Vector Search (ค้นหาจาก Qdrant)
         k_val = 5
         search_results = vector_store.similarity_search(req.message, k=k_val)
         
         for doc in search_results:
             context_text += f"{doc.page_content}\n\n"
-            # Logic การดึง Source URL แบบเดิมของคุณ
             file_path = doc.metadata.get("file", "เอกสารทั่วไป")
             doc_url = ""
             display_name = file_path.split("/")[-1]
+            
+            # พยายามหา URL จาก Master Data
             for item in FORM_MASTER_DATA:
                 if item["url"] in file_path or item["id"] in doc.page_content:
                     doc_url = item["url"]
                     display_name = f"{item['id']} {item['name']}"
                     break
+            
+            # ถ้าหาไม่เจอ ให้หาจาก Regex ในข้อความ
             if not doc_url:
                 found_urls = re.findall(r'(https?://[^\s\)]+)', doc.page_content)
                 if found_urls: doc_url = found_urls[0]
+            
             if doc_url:
                 if not any(s['url'] == doc_url for s in sources):
                     sources.append({"doc": display_name, "page": 1, "url": doc_url})
 
-        # 3. AI Processing with History
+        # 3. AI Processing (เรียกฟังก์ชันโดยส่ง parameter ครบ 4 ตัว)
         answer = get_ai_response(context_text, req.message, req.history, groq_client)
         
         return { "reply": answer, "sources": sources }
@@ -274,18 +238,14 @@ def chat_endpoint(req: ChatRequest):
         print(f"Error: {e}")
         return { "reply": "เกิดข้อผิดพลาดในระบบ", "sources": [] }
 
-# ✅ API สร้างเอกสาร
 @app.post("/generate-form")
 async def generate_form_endpoint(data: dict = Body(...)):
     print(f"📝 กำลังสร้างฟอร์ม: {data}")
     
     form_type = data.get("formType") or data.get("form_type") or data.get("form_id") or ""
-    
-    # ปรับจูนให้รองรับ input หลากหลาย เช่น "RO.16" หรือ "RO-16"
     form_type = form_type.replace("-", ".").upper() 
 
     if form_type not in TEMPLATE_MAP:
-        # Fallback กรณีหาฟอร์มไม่เจอ ให้ใช้ General Request
         print(f"⚠️ ไม่พบ Template {form_type}, ใช้ RO.01 แทน")
         form_type = "RO.01"
 
@@ -296,9 +256,8 @@ async def generate_form_endpoint(data: dict = Body(...)):
     try:
         doc = DocxTemplate(template_path)
         
-        # เตรียม Context สำหรับ Docxtpl
         context = {
-            "student_id": data.get("studentId") or data.get("student_id") or ".........", # เผื่อกรณีไม่มีข้อมูล
+            "student_id": data.get("studentId") or data.get("student_id") or ".........", 
             "student_name": data.get("name") or "..................................................",
             "faculty": data.get("faculty") or "....................",
             "department": data.get("department") or "....................",
