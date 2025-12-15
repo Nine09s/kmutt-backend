@@ -272,57 +272,63 @@ Step 3: Response Structure (โครงสร้างคำตอบ) ให�
     ]
    
     try:
+        response = groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=messages,
+            temperature=0.1,
+            max_tokens=500  # Limit เพื่อป้องกัน response ยาวซ้ำ
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"AI Error: {str(e)}"
+
+@app.get("/")
+def read_root():
+    return {"status": "Server is running 🚀"}
+
+@app.post("/chat")
+def chat_endpoint(req: UserRequest):
+    print(f"📩 คำถาม: {req.message}")
+    vector_store, groq_client = get_rag_system()
+    user_query = req.message.lower()
+   
+    try:
         context_text = ""
         sources = []
-    
-        # 1. Keyword Search (ค้นหาจาก FORM_MASTER_DATA)
-        for item in FORM_MASTER_DATA:
-            for kw in item["keywords"]:
-                if kw in user_query: 
-                    # Add context for keywords matched in the query
-                    context_text += f"\n[ข้อมูลสำคัญ]: ผู้ใช้ถามถึง '{item['name']}' ({item['id']}). ลิงก์: {item['url']}\n"
-                    # Avoid duplicate sources
-                    if not any(s['url'] == item["url"] for s in sources):
-                        sources.append({"doc": f"{item['id']} {item['name']}", "page": 1, "url": item["url"]})
-                    break  # Match a keyword only once per item
-    
-        # 2. Vector Search (Search relevant documents from Qdrant)
-        k_val = 5
-        search_results = vector_store.similarity_search(req.message, k=k_val)
+       
+        # ✅ Pure RAG: ค้นหา Vector DB (Qdrant) ตรงๆ เหมือน notebook (k=5)
+        search_results = vector_store.similarity_search(req.message, k=5)
+       
         for doc in search_results:
-            # Append vector-based context
             context_text += f"{doc.page_content}\n\n"
-            # Extract source metadata from the document
+           
+            # (ส่วนหาลิงก์จาก PDF เหมือนเดิม เผื่อกรณี Keyword ไม่ครอบคลุม)
             file_path = doc.metadata.get("file", "เอกสารทั่วไป")
             doc_url = ""
             display_name = file_path.split("/")[-1]
-    
-            # Attempt to find URL from FORM_MASTER_DATA
+            # พยายาม Match ลิงก์จาก FORM_MASTER_DATA (สำหรับ display สวยๆ)
             for item in FORM_MASTER_DATA:
                 if item["url"] in file_path or item["id"] in doc.page_content:
                     doc_url = item["url"]
                     display_name = f"{item['id']} {item['name']}"
                     break
-    
-            # Use regex to extract URL if no match from FORM_MASTER_DATA
+           
             if not doc_url:
                 found_urls = re.findall(r'(https?://[^\s\)]+)', doc.page_content)
-                if found_urls: 
-                    doc_url = found_urls[0]
-    
-            # Avoid duplicate sources
-            if doc_url and not any(s['url'] == doc_url for s in sources):
-                sources.append({"doc": display_name, "page": 1, "url": doc_url})
-    
-        # 3. Compile all context and invoke AI Response Generation
-        # Send merged context from both keyword-based and vector-based search
-        answer = get_ai_response(context_text, req.message, "ประวัติคำถามหรือข้อมูลจากผู้ใช้", groq_client)
-    
-        return {"reply": answer, "sources": sources}
-    
+                if found_urls: doc_url = found_urls[0]
+            if doc_url:
+                if not any(s['url'] == doc_url for s in sources):
+                    sources.append({
+                        "doc": display_name,
+                        "page": 1,
+                        "url": doc_url
+                    })
+        answer = get_ai_response(context_text, req.message, groq_client)
+        return { "reply": answer, "sources": sources }
+   
     except Exception as e:
         print(f"Error: {e}")
-        return {"reply": "เกิดข้อผิดพลาดในระบบ", "sources": []}
+        return { "reply": "เกิดข้อผิดพลาดในระบบ", "sources": [] }
 
 # ✅ API สำหรับสร้างเอกสาร Word (Fill Form) – เหมือนเดิม
 @app.post("/generate-form")
