@@ -272,57 +272,57 @@ Step 3: Response Structure (โครงสร้างคำตอบ) ให�
     ]
    
     try:
-    context_text = ""
-    sources = []
-
-    # 1. Keyword Search (ค้นหาจาก FORM_MASTER_DATA)
-    for item in FORM_MASTER_DATA:
-        for kw in item["keywords"]:
-            if kw in user_query: 
-                # Add context for keywords matched in the query
-                context_text += f"\n[ข้อมูลสำคัญ]: ผู้ใช้ถามถึง '{item['name']}' ({item['id']}). ลิงก์: {item['url']}\n"
-                # Avoid duplicate sources
-                if not any(s['url'] == item["url"] for s in sources):
-                    sources.append({"doc": f"{item['id']} {item['name']}", "page": 1, "url": item["url"]})
-                break  # Match a keyword only once per item
-
-    # 2. Vector Search (Search relevant documents from Qdrant)
-    k_val = 5
-    search_results = vector_store.similarity_search(req.message, k=k_val)
-    for doc in search_results:
-        # Append vector-based context
-        context_text += f"{doc.page_content}\n\n"
-        # Extract source metadata from the document
-        file_path = doc.metadata.get("file", "เอกสารทั่วไป")
-        doc_url = ""
-        display_name = file_path.split("/")[-1]
-
-        # Attempt to find URL from FORM_MASTER_DATA
+        context_text = ""
+        sources = []
+    
+        # 1. Keyword Search (ค้นหาจาก FORM_MASTER_DATA)
         for item in FORM_MASTER_DATA:
-            if item["url"] in file_path or item["id"] in doc.page_content:
-                doc_url = item["url"]
-                display_name = f"{item['id']} {item['name']}"
-                break
-
-        # Use regex to extract URL if no match from FORM_MASTER_DATA
-        if not doc_url:
-            found_urls = re.findall(r'(https?://[^\s\)]+)', doc.page_content)
-            if found_urls: 
-                doc_url = found_urls[0]
-
-        # Avoid duplicate sources
-        if doc_url and not any(s['url'] == doc_url for s in sources):
-            sources.append({"doc": display_name, "page": 1, "url": doc_url})
-
-    # 3. Compile all context and invoke AI Response Generation
-    # Send merged context from both keyword-based and vector-based search
-    answer = get_ai_response(context_text, req.message, "ประวัติคำถามหรือข้อมูลจากผู้ใช้", groq_client)
-
-    return {"reply": answer, "sources": sources}
-
-except Exception as e:
-    print(f"Error: {e}")
-    return {"reply": "เกิดข้อผิดพลาดในระบบ", "sources": []}
+            for kw in item["keywords"]:
+                if kw in user_query: 
+                    # Add context for keywords matched in the query
+                    context_text += f"\n[ข้อมูลสำคัญ]: ผู้ใช้ถามถึง '{item['name']}' ({item['id']}). ลิงก์: {item['url']}\n"
+                    # Avoid duplicate sources
+                    if not any(s['url'] == item["url"] for s in sources):
+                        sources.append({"doc": f"{item['id']} {item['name']}", "page": 1, "url": item["url"]})
+                    break  # Match a keyword only once per item
+    
+        # 2. Vector Search (Search relevant documents from Qdrant)
+        k_val = 5
+        search_results = vector_store.similarity_search(req.message, k=k_val)
+        for doc in search_results:
+            # Append vector-based context
+            context_text += f"{doc.page_content}\n\n"
+            # Extract source metadata from the document
+            file_path = doc.metadata.get("file", "เอกสารทั่วไป")
+            doc_url = ""
+            display_name = file_path.split("/")[-1]
+    
+            # Attempt to find URL from FORM_MASTER_DATA
+            for item in FORM_MASTER_DATA:
+                if item["url"] in file_path or item["id"] in doc.page_content:
+                    doc_url = item["url"]
+                    display_name = f"{item['id']} {item['name']}"
+                    break
+    
+            # Use regex to extract URL if no match from FORM_MASTER_DATA
+            if not doc_url:
+                found_urls = re.findall(r'(https?://[^\s\)]+)', doc.page_content)
+                if found_urls: 
+                    doc_url = found_urls[0]
+    
+            # Avoid duplicate sources
+            if doc_url and not any(s['url'] == doc_url for s in sources):
+                sources.append({"doc": display_name, "page": 1, "url": doc_url})
+    
+        # 3. Compile all context and invoke AI Response Generation
+        # Send merged context from both keyword-based and vector-based search
+        answer = get_ai_response(context_text, req.message, "ประวัติคำถามหรือข้อมูลจากผู้ใช้", groq_client)
+    
+        return {"reply": answer, "sources": sources}
+    
+    except Exception as e:
+        print(f"Error: {e}")
+        return {"reply": "เกิดข้อผิดพลาดในระบบ", "sources": []}
 
 # ✅ API สำหรับสร้างเอกสาร Word (Fill Form) – เหมือนเดิม
 @app.post("/generate-form")
